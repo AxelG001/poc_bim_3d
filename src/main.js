@@ -2,30 +2,97 @@ import './style.css';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader'
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader'
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { MeshTransmissionMaterial } from './MeshTransmissionMaterial'
 import GUI from 'lil-gui'
-
+import Stats from 'stats.js'
+import { metalness, transmission } from 'three/src/nodes/TSL.js';
+import vertexShader from './shaders/vertex.glsl?raw'
+import fragmentShader from './shaders/fragment.glsl?raw'
 THREE.ColorManagement.legacyMode = false
+
+
+const startTime = Date.now()
+
+const colors = ['#f2884b', '#0000ff', '#afff00', '#a331dd', '#ff0000']
+
+
+const geometry = new THREE.PlaneGeometry( 15, 15 , 100, 100)
+
+const rainbowmaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    time: {value: 0},
+    uColor: {value: colors.map((color) => new THREE.Color(color))}
+  },
+  vertexShader: vertexShader,
+  fragmentShader: fragmentShader,
+  transparent: true,
+})
+
+const cube = new THREE.Mesh( geometry, rainbowmaterial )
+cube.position.set(0, 0, -4)
+cube.rotateX(THREE.MathUtils.degToRad(-20))
 
 //scene setup
 const ambientLight = new THREE.AmbientLight()
 const pointLight = new THREE.PointLight()
 const scene = new THREE.Scene()
-scene.background = new THREE.Color('#f0f0f0ff')
+scene.background = null
+scene.add(cube)
 
 
 const camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.1, 1000)
-camera.position.set(5, 0, 20)
-
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
 renderer.setPixelRatio(Math.min(Math.max(1, window.devicePixelRatio), 2))
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.outputEncoding = THREE.sRGBEncoding
 document.body.appendChild(renderer.domElement)
 
+// Stats.js (show ALL default panels by stacking 3 instances)
+const statsFps = new Stats()
+statsFps.showPanel(0) // FPS
+statsFps.dom.style.position = 'fixed'
+statsFps.dom.style.left = '0'
+statsFps.dom.style.top = '0'
+statsFps.dom.style.zIndex = '9999'
+document.body.appendChild(statsFps.dom)
+
+const statsMs = new Stats()
+statsMs.showPanel(1) // MS
+statsMs.dom.style.position = 'fixed'
+statsMs.dom.style.left = '0'
+statsMs.dom.style.top = '48px'
+statsMs.dom.style.zIndex = '9999'
+document.body.appendChild(statsMs.dom)
+
+const statsMb = new Stats()
+statsMb.showPanel(2) // MB (only meaningful if `performance.memory` exists)
+statsMb.dom.style.position = 'fixed'
+statsMb.dom.style.left = '0'
+statsMb.dom.style.top = '96px'
+statsMb.dom.style.zIndex = '9999'
+document.body.appendChild(statsMb.dom)
+
+// Extra renderer stats (draw calls / tris / textures / geometries)
+const rendererInfoEl = document.createElement('pre')
+rendererInfoEl.style.position = 'fixed'
+rendererInfoEl.style.left = '0'
+rendererInfoEl.style.top = '144px'
+rendererInfoEl.style.zIndex = '9999'
+rendererInfoEl.style.margin = '0'
+rendererInfoEl.style.padding = '6px 8px'
+rendererInfoEl.style.background = 'rgba(0,0,0,0.55)'
+rendererInfoEl.style.color = '#fff'
+rendererInfoEl.style.font = '12px/1.2 monospace'
+rendererInfoEl.style.pointerEvents = 'none'
+document.body.appendChild(rendererInfoEl)
+
+
+camera.position.set(-2, 5, 20)
+
 const controls = new OrbitControls(camera, renderer.domElement)
+controls.target.set(4, 3, 0) // or whatever you want to look at
 
 // --- GUI + movable standard cube ---
 const gui = new GUI()
@@ -38,6 +105,15 @@ const standardCube = new THREE.Mesh(
     metalness: 0.05
   })
 )
+const customMat = new THREE.MeshPhysicalMaterial({
+    transmission: 1.0,
+    thickness: 0.2,
+    roughness: 0.4, 
+    metalness: 0.0,
+    transparent: true,
+    dispersion: 0.9,
+    iridescence: 0.9,
+  })
 
 standardCube.position.set(3.0, -2.2, 0)
 scene.add(standardCube)
@@ -82,16 +158,21 @@ const [{ scene: gltfScene }, env] = await Promise.all([
   new Promise((res) => envLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/dancing_hall_1k.hdr', res))
 ])
 
+  env.mapping = THREE.EquirectangularReflectionMapping
   scene.environment = env
-  scene.environment.mapping = THREE.EquirectangularReflectionMapping
+  scene.background = env
 
-  scene.add(ambientLight)
-  scene.add(pointLight)
+  // scene.add(ambientLight)
+  // scene.add(pointLight)
   scene.add(gltfScene)
 
   pointLight.position.set(10, 10, 10)
   gltfScene.position.set(1, -3.45, 0)
   const cube1 = gltfScene.getObjectByName('cube1')
+
+
+
+  
   const createGlassMaterial = () =>
     Object.assign(new MeshTransmissionMaterial(10), {
       clearcoat: 1,
@@ -104,7 +185,7 @@ const [{ scene: gltfScene }, env] = await Promise.all([
       ior: 1.5,
       distortion: 0.1,
       distortionScale: 0.2,
-      temporalDistortion: 0.2
+      temporalDistortion: 0.2,
     })
 
   if (cube1) {
@@ -115,9 +196,15 @@ const [{ scene: gltfScene }, env] = await Promise.all([
 
   // Add a dodecahedron next to the GLB model, using the same shader/material
   const dodecaGeo = new THREE.DodecahedronGeometry(1.25, 0)
-  const dodeca = new THREE.Mesh(dodecaGeo, createGlassMaterial())
+  const dodeca = new THREE.Mesh(dodecaGeo, customMat)
   dodeca.position.set(-2.5, -2.2, 0) // adjust to taste
   scene.add(dodeca)
+
+
+  const knotGeo = new THREE.TorusKnotGeometry(1, 0.3, 128, 32)
+  const knot = new THREE.Mesh(knotGeo, customMat)
+  knot.position.set(3, 3, 0)
+  scene.add(knot)
 
 
   function resize() {
@@ -132,8 +219,10 @@ const [{ scene: gltfScene }, env] = await Promise.all([
   resize()
 
   function animate(t) {
-    requestAnimationFrame(animate)
+  
 
+    requestAnimationFrame(animate)
+cube.material.uniforms.time.value = Date.now() - startTime
     if (cube1?.material) cube1.material.time = t / 1000
     dodeca.material.time = t / 1000
 
@@ -142,6 +231,21 @@ const [{ scene: gltfScene }, env] = await Promise.all([
 
     controls.update()
     renderer.render(scene, camera)
+
+     // Update all stats panels
+  statsFps.update()
+  statsMs.update()
+  statsMb.update()
+
+  // Update renderer info
+  const info = renderer.info
+  rendererInfoEl.textContent =
+    `calls:     ${info.render.calls}\n` +
+    `triangles: ${info.render.triangles}\n` +
+    `lines:     ${info.render.lines}\n` +
+    `points:    ${info.render.points}\n` +
+    `geoms:     ${info.memory.geometries}\n` +
+    `textures:  ${info.memory.textures}`
   }
 
   animate()
