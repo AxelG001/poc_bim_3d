@@ -13,36 +13,70 @@ import fragmentShader from './shaders/fragment.glsl?raw'
 THREE.ColorManagement.legacyMode = false
 
 
+
+
+
 const startTime = Date.now()
 
-const colors = ['#f2884b', '#0000ff', '#afff00', '#a331dd', '#ff0000']
+
+// Palettes
+const colorsA = ['#f0f0f0', '#eaa353', '#f49510', '#211f1c', '#c9c9c9']
+const colorsB = ['#f0f0f0', '#eaa353', '#f49510', '#211f1c', '#c9c9c9']
 
 
-const geometry = new THREE.PlaneGeometry( 15, 15 , 100, 100)
+const planegeometryA = new THREE.PlaneGeometry(25, 15 , 100, 100)
+const planegeometryB = new THREE.PlaneGeometry(25, 15 , 100, 100)
 
-const rainbowmaterial = new THREE.ShaderMaterial({
-  uniforms: {
-    time: {value: 0},
-    uColor: {value: colors.map((color) => new THREE.Color(color))}
-  },
-  vertexShader: vertexShader,
-  fragmentShader: fragmentShader,
-  transparent: true,
-})
 
-const cube = new THREE.Mesh( geometry, rainbowmaterial )
-cube.position.set(0, 0, -4)
-cube.rotateX(THREE.MathUtils.degToRad(-20))
+function makeRainbowMaterial(palette, { transparent = false, opactity= 1, intensity=1}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: startTime }, // shared reference
+      uColor: { value: palette.map((c) => new THREE.Color(c)) }, // unique per plane
+      uIntensity: {value:intensity}
+    },
+    vertexShader,
+    fragmentShader,
+    transparent,
+  })
+}
+
+function makeRainbowMaterial2(palette, { transparent = false, opactity= 1}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      time: { value: startTime }, // shared reference
+      uColor: { value: palette.map((c) => new THREE.Color(c)) }, // unique per plane
+    },
+    vertexShader,
+    fragmentShader,
+    transparent,
+  })
+}
+
+
+// Plane A
+const lightplane = new THREE.Mesh( planegeometryA, makeRainbowMaterial(colorsA, { transparent: false, opacity: 1 } ) )
+lightplane.position.set(0, 0, -6)
+
+// Plane B (clone geometry, different colors)
+const lightplane2 = new THREE.Mesh(planegeometryB, makeRainbowMaterial2(colorsB, { transparent: false, opacity: 1 }))
+lightplane2.position.set(20, 0, -6) // move it so you can see both
+
+
+lightplane.position.set(0, 0, -4)
+// lightplane.rotateX(THREE.MathUtils.degToRad(-20))
 
 //scene setup
 const ambientLight = new THREE.AmbientLight()
 const pointLight = new THREE.PointLight()
 const scene = new THREE.Scene()
-scene.background = null
-scene.add(cube)
+scene.background = new THREE.Color(0x000000) // <-- black background
+
+scene.add(lightplane)
+scene.add(lightplane2)
 
 
-const camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.1, 1000)
+const camera = new THREE.PerspectiveCamera(15, window.innerWidth / window.innerHeight, 0.1, 1000)
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
 renderer.setPixelRatio(Math.min(Math.max(1, window.devicePixelRatio), 2))
 renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -89,30 +123,56 @@ rendererInfoEl.style.pointerEvents = 'none'
 document.body.appendChild(rendererInfoEl)
 
 
-camera.position.set(-2, 5, 20)
+camera.position.set(0, 0, 45)
 
 const controls = new OrbitControls(camera, renderer.domElement)
-controls.target.set(4, 3, 0) // or whatever you want to look at
+controls.target.set(0, 0, 0) // or whatever you want to look at
 
 // --- GUI + movable standard cube ---
 const gui = new GUI()
+
+// --- GUI: gradient plane colors ---
+const gradientFolder = gui.addFolder('Gradient Plane')
+const gradientParams = {
+  color0: colorsA[0],
+  color1: colorsA[1],
+  color2: colorsA[2],
+  color3: colorsA[3],
+  color4: colorsA[4],
+}
+
+const setGradientColor = (index, value) => {
+  const uColor = lightplane.material?.uniforms?.uColor
+  if (!uColor?.value?.[index]) return
+  uColor.value[index].set(value)
+}
+
+gradientFolder.addColor(gradientParams, 'color0').name('Color 1').onChange((v) => setGradientColor(0, v))
+gradientFolder.addColor(gradientParams, 'color1').name('Color 2').onChange((v) => setGradientColor(1, v))
+gradientFolder.addColor(gradientParams, 'color2').name('Color 3').onChange((v) => setGradientColor(2, v))
+gradientFolder.addColor(gradientParams, 'color3').name('Color 4').onChange((v) => setGradientColor(3, v))
+gradientFolder.addColor(gradientParams, 'color4').name('Color 5').onChange((v) => setGradientColor(4, v))
+gradientFolder.open()
 
 const standardCube = new THREE.Mesh(
   new THREE.BoxGeometry(1.2, 1.2, 1.2),
   new THREE.MeshStandardMaterial({
     color: '#ff5533',
     roughness: 0.35,
-    metalness: 0.05
+    metalness: 0.05,
   })
 )
 const customMat = new THREE.MeshPhysicalMaterial({
     transmission: 1.0,
-    thickness: 0.2,
+    thickness: 0.1,
     roughness: 0.4, 
     metalness: 0.0,
+    dispersion: 1,
+    ior: 1.5,
     transparent: true,
     dispersion: 0.9,
-    iridescence: 0.9,
+    iridescence: 0.4,
+    specularColor: new THREE.Color('#f37500ff'),
   })
 
 standardCube.position.set(3.0, -2.2, 0)
@@ -147,32 +207,33 @@ const dracoLoader = new DRACOLoader()
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.3/')
 gltfLoader.setDRACOLoader(dracoLoader)
 
-const [{ scene: gltfScene }, env] = await Promise.all([
-  /*
-  Author: glenatron (https://sketchfab.com/glenatron)
-  License: CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
-  Source: https://sketchfab.com/3d-models/gelatinous-cube-e08385238f4d4b59b012233a9fbdca21
-  Title: Gelatinous Cube
-  */
-  new Promise((res) => gltfLoader.load('/gelatinous_cube-transformed.glb', res)),
-  new Promise((res) => envLoader.load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/dancing_hall_1k.hdr', res))
+// Load everything in parallel (2 models + HDR)
+const [cubeGltf, logoGltf, env] = await Promise.all([
+  gltfLoader.loadAsync('/gelatinous_cube-transformed.glb'),
+  gltfLoader.loadAsync('/models/LOGOBIMthin.glb'),
+  envLoader.loadAsync('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/dancing_hall_1k.hdr'),
 ])
+env.mapping = THREE.EquirectangularReflectionMapping
+scene.environment = env
+scene.background = new THREE.Color(0x000000) // <-- black background
 
-  env.mapping = THREE.EquirectangularReflectionMapping
-  scene.environment = env
-  scene.background = env
 
-  // scene.add(ambientLight)
-  // scene.add(pointLight)
-  scene.add(gltfScene)
+const gltfScene = cubeGltf.scene
+// scene.add(gltfScene)
 
-  pointLight.position.set(10, 10, 10)
+const bimlogo = logoGltf.scene
+scene.add(bimlogo)
+
+bimlogo.position.set(0, 0, 20)
+bimlogo.rotation.x = Math.PI * 0.5
+bimlogo.scale.setScalar(2)
+
+  // pointLight.position.set(10, 10, 10)
   gltfScene.position.set(1, -3.45, 0)
   const cube1 = gltfScene.getObjectByName('cube1')
 
 
 
-  
   const createGlassMaterial = () =>
     Object.assign(new MeshTransmissionMaterial(10), {
       clearcoat: 1,
@@ -206,6 +267,12 @@ const [{ scene: gltfScene }, env] = await Promise.all([
   knot.position.set(3, 3, 0)
   scene.add(knot)
 
+  // Apply glass to the BIM logo (all meshes)
+  bimlogo.traverse((o) => {
+    if (!o.isMesh) return
+    o.material = customMat
+  })
+
 
   function resize() {
     const width = window.innerWidth
@@ -222,7 +289,7 @@ const [{ scene: gltfScene }, env] = await Promise.all([
   
 
     requestAnimationFrame(animate)
-cube.material.uniforms.time.value = Date.now() - startTime
+lightplane.material.uniforms.time.value = Date.now() - startTime
     if (cube1?.material) cube1.material.time = t / 1000
     dodeca.material.time = t / 1000
 
