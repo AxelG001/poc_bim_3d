@@ -1,15 +1,15 @@
 import './style.css';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-import { MeshTransmissionMaterial } from './MeshTransmissionMaterial'
-import GUI from 'lil-gui'
-import Stats from 'stats.js'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { MeshTransmissionMaterial } from './MeshTransmissionMaterial';
+import GUI from 'lil-gui';
+import Stats from 'stats.js';
 import { metalness, transmission } from 'three/src/nodes/TSL.js';
-import vertexShader from './shaders/vertex.glsl?raw'
-import fragmentShader from './shaders/fragment.glsl?raw'
+import vertexShader from './shaders/vertex.glsl?raw';
+import fragmentShader from './shaders/fragment.glsl?raw';
 THREE.ColorManagement.legacyMode = false
 
 
@@ -21,6 +21,8 @@ const startTime = Date.now()
 
 // Palettes
 const colorsA = ['#f0f0f0', '#eaa353', '#f49510', '#211f1c', '#c9c9c9']
+const colorsC = ['#e5931f', '#e78b23', '#f49510', '#eaddc8', '#f2e1c5']
+
 const colorsB = ['#f0f0f0', '#eaa353', '#f49510', '#211f1c', '#c9c9c9']
 
 
@@ -28,7 +30,7 @@ const planegeometryA = new THREE.PlaneGeometry(25, 15 , 100, 100)
 const planegeometryB = new THREE.PlaneGeometry(25, 15 , 100, 100)
 
 
-function makeRainbowMaterial(palette, { transparent = false, opactity= 1, intensity=1}) {
+function makeRainbowMaterial(palette, { transparent = false, opactity= 1, intensity=0.4}) {
   return new THREE.ShaderMaterial({
     uniforms: {
       time: { value: startTime }, // shared reference
@@ -61,14 +63,13 @@ lightplane.position.set(0, 0, -6)
 // Plane B (clone geometry, different colors)
 const lightplane2 = new THREE.Mesh(planegeometryB, makeRainbowMaterial2(colorsB, { transparent: false, opacity: 1 }))
 lightplane2.position.set(20, 0, -6) // move it so you can see both
-
-
+lightplane.matrixAutoUpdate = false
+lightplane.matrixAutoUpdate = false
 lightplane.position.set(0, 0, -4)
 // lightplane.rotateX(THREE.MathUtils.degToRad(-20))
 
 //scene setup
-const ambientLight = new THREE.AmbientLight()
-const pointLight = new THREE.PointLight()
+
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x000000) // <-- black background
 
@@ -77,10 +78,13 @@ scene.add(lightplane2)
 
 
 const camera = new THREE.PerspectiveCamera(15, window.innerWidth / window.innerHeight, 0.1, 1000)
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, depth: false, preserveDrawingBuffer : false })
 renderer.setPixelRatio(Math.min(Math.max(1, window.devicePixelRatio), 2))
 renderer.toneMapping = THREE.ACESFilmicToneMapping
 renderer.outputEncoding = THREE.sRGBEncoding
+
+console.log('Renderer:', devicePixelRatio, renderer.getPixelRatio())
+
 document.body.appendChild(renderer.domElement)
 
 // Stats.js (show ALL default panels by stacking 3 instances)
@@ -154,14 +158,18 @@ gradientFolder.addColor(gradientParams, 'color3').name('Color 4').onChange((v) =
 gradientFolder.addColor(gradientParams, 'color4').name('Color 5').onChange((v) => setGradientColor(4, v))
 gradientFolder.open()
 
-const standardCube = new THREE.Mesh(
-  new THREE.BoxGeometry(1.2, 1.2, 1.2),
-  new THREE.MeshStandardMaterial({
-    color: '#ff5533',
-    roughness: 0.35,
-    metalness: 0.05,
-  })
-)
+// const standardCube = new THREE.Mesh(
+//   new THREE.BoxGeometry(1.2, 1.2, 1.2),
+//   new THREE.MeshStandardMaterial({
+//     color: '#ff5533',
+//     roughness: 0.35,
+//     metalness: 0.05,
+//   })
+// )
+
+// standardCube.position.set(3.0, -2.2, 0)
+// scene.add(standardCube)
+
 const customMat = new THREE.MeshPhysicalMaterial({
     transmission: 1.0,
     thickness: 0.1,
@@ -175,29 +183,28 @@ const customMat = new THREE.MeshPhysicalMaterial({
     specularColor: new THREE.Color('#f37500ff'),
   })
 
-standardCube.position.set(3.0, -2.2, 0)
-scene.add(standardCube)
+  customMat.alpha = false
 
-const cubeFolder = gui.addFolder('Standard Cube')
-cubeFolder.add(standardCube.position, 'x', -10, 10, 0.01)
-cubeFolder.add(standardCube.position, 'y', -10, 10, 0.01)
-cubeFolder.add(standardCube.position, 'z', -10, 10, 0.01)
-cubeFolder.add(standardCube.rotation, 'x', -Math.PI, Math.PI, 0.001)
-cubeFolder.add(standardCube.rotation, 'y', -Math.PI, Math.PI, 0.001)
-cubeFolder.add(standardCube.rotation, 'z', -Math.PI, Math.PI, 0.001)
-cubeFolder.add(standardCube.scale, 'x', 0.1, 5, 0.01).name('scaleX')
-cubeFolder.add(standardCube.scale, 'y', 0.1, 5, 0.01).name('scaleY')
-cubeFolder.add(standardCube.scale, 'z', 0.1, 5, 0.01).name('scaleZ')
+// const cubeFolder = gui.addFolder('Standard Cube')
+// cubeFolder.add(standardCube.position, 'x', -10, 10, 0.01)
+// cubeFolder.add(standardCube.position, 'y', -10, 10, 0.01)
+// cubeFolder.add(standardCube.position, 'z', -10, 10, 0.01)
+// cubeFolder.add(standardCube.rotation, 'x', -Math.PI, Math.PI, 0.001)
+// cubeFolder.add(standardCube.rotation, 'y', -Math.PI, Math.PI, 0.001)
+// cubeFolder.add(standardCube.rotation, 'z', -Math.PI, Math.PI, 0.001)
+// cubeFolder.add(standardCube.scale, 'x', 0.1, 5, 0.01).name('scaleX')
+// cubeFolder.add(standardCube.scale, 'y', 0.1, 5, 0.01).name('scaleY')
+// cubeFolder.add(standardCube.scale, 'z', 0.1, 5, 0.01).name('scaleZ')
 
-const cubeMatParams = {
-  color: '#ff5533',
-  roughness: standardCube.material.roughness,
-  metalness: standardCube.material.metalness
-}
-cubeFolder.addColor(cubeMatParams, 'color').onChange((v) => standardCube.material.color.set(v))
-cubeFolder.add(cubeMatParams, 'roughness', 0, 1, 0.001).onChange((v) => (standardCube.material.roughness = v))
-cubeFolder.add(cubeMatParams, 'metalness', 0, 1, 0.001).onChange((v) => (standardCube.material.metalness = v))
-cubeFolder.open()
+// const cubeMatParams = {
+//   color: '#ff5533',
+//   roughness: standardCube.material.roughness,
+//   metalness: standardCube.material.metalness
+// }
+// cubeFolder.addColor(cubeMatParams, 'color').onChange((v) => standardCube.material.color.set(v))
+// cubeFolder.add(cubeMatParams, 'roughness', 0, 1, 0.001).onChange((v) => (standardCube.material.roughness = v))
+// cubeFolder.add(cubeMatParams, 'metalness', 0, 1, 0.001).onChange((v) => (standardCube.material.metalness = v))
+// cubeFolder.open()
 // --- end GUI + cube ---
 
 const envLoader = new RGBELoader()
@@ -216,7 +223,7 @@ const [cubeGltf, logoGltf, env] = await Promise.all([
 env.mapping = THREE.EquirectangularReflectionMapping
 scene.environment = env
 scene.background = new THREE.Color(0x000000) // <-- black background
-
+scene.overrideMaterial
 
 const gltfScene = cubeGltf.scene
 // scene.add(gltfScene)
@@ -256,16 +263,16 @@ bimlogo.scale.setScalar(2)
   }
 
   // Add a dodecahedron next to the GLB model, using the same shader/material
-  const dodecaGeo = new THREE.DodecahedronGeometry(1.25, 0)
-  const dodeca = new THREE.Mesh(dodecaGeo, customMat)
-  dodeca.position.set(-2.5, -2.2, 0) // adjust to taste
-  scene.add(dodeca)
+  // const dodecaGeo = new THREE.DodecahedronGeometry(1.25, 0)
+  // const dodeca = new THREE.Mesh(dodecaGeo, customMat)
+  // dodeca.position.set(-2.5, -2.2, 0) // adjust to taste
+  // scene.add(dodeca)
 
 
-  const knotGeo = new THREE.TorusKnotGeometry(1, 0.3, 128, 32)
-  const knot = new THREE.Mesh(knotGeo, customMat)
-  knot.position.set(3, 3, 0)
-  scene.add(knot)
+  // const knotGeo = new THREE.TorusKnotGeometry(1, 0.3, 128, 32)
+  // const knot = new THREE.Mesh(knotGeo, customMat)
+  // knot.position.set(3, 3, 0)
+  // scene.add(knot)
 
   // Apply glass to the BIM logo (all meshes)
   bimlogo.traverse((o) => {
@@ -291,10 +298,7 @@ bimlogo.scale.setScalar(2)
     requestAnimationFrame(animate)
 lightplane.material.uniforms.time.value = Date.now() - startTime
     if (cube1?.material) cube1.material.time = t / 1000
-    dodeca.material.time = t / 1000
-
-    dodeca.rotation.y = t * 0.0006
-    dodeca.rotation.x = t * 0.0003
+   
 
     controls.update()
     renderer.render(scene, camera)
@@ -315,4 +319,10 @@ lightplane.material.uniforms.time.value = Date.now() - startTime
     `textures:  ${info.memory.textures}`
   }
 
+
+
   animate()
+
+  var gl= renderer.getContext();
+  console.log(gl);
+
