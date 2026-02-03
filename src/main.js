@@ -22,24 +22,39 @@ import { sample } from 'three/tsl';
 
 THREE.ColorManagement.legacyMode = false
 
+// scene setup
+const scene = new THREE.Scene()
+
+
+const camera = new THREE.PerspectiveCamera(12, window.innerWidth / window.innerHeight, 0.1, 1000)
+const renderer = new THREE.WebGLRenderer({ antialias: true,  })
+
+renderer.setPixelRatio(Math.min(Math.max(1, window.devicePixelRatio), 2))
+// renderer.toneMapping = THREE.ACESFilmicToneMapping
+// renderer.outputEncoding = THREE.sRGBEncoding
+// renderer.toneMappingExposure = 1.0
+
+console.log('Renderer:', devicePixelRatio, renderer.getPixelRatio())
+
+document.body.appendChild(renderer.domElement)
+
 const startTime = Date.now()
 
 // Palettes
-const colorsA = ['#ff881a', '#f49510', '#f49510', '#fbe4e4', '#fbe4e4']
+const colorsA = ['#ffffff', '#ffd5c7', '#f49510', '#fbe4e4', '#fbe4e4']
 
 const gui = new GUI()
-const planegeometryA = new THREE.PlaneGeometry(25, 15, 100, 100)
+const planegeometryA = new THREE.PlaneGeometry(25, 20, 100, 100)
 
 // Add texture loader
 const textureLoader = new THREE.TextureLoader()
-
 
 
 const fontLoader = new FontLoader()
 fontLoader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', (font) => {
   const textGeometry = new TextGeometry('Bim Agency', {
      font: font,
-                size: 2,
+                size: 1.5,
                 depth: 0.1,
                 curveSegments: 12,
                 bevelEnabled: true,
@@ -49,9 +64,9 @@ fontLoader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.jso
                 bevelSegments: 5
   })
   
-  const textMaterial = new THREE.MeshBasicMaterial({ color: '#585858' })
+  const textMaterial = new THREE.MeshBasicMaterial({ color: '#1e1e1e' })
   const textMesh = new THREE.Mesh(textGeometry, textMaterial)
-  textMesh.position.set(-8, 0, -8)
+  textMesh.position.set(-6, 0, -8)
   scene.add(textMesh)
 })
 // Create a plane with a video texture
@@ -129,15 +144,12 @@ videoPlane.position.set(0, 0, -5)
 
 function makeRainbowMaterial(palette, { intensity = 0.8 }) {
   // Convert colors to linear space for correct rendering
-  const linearColors = palette.map((c) => {
-    const color = new THREE.Color(c)
-    color.convertSRGBToLinear() // Convert to linear space
-    return color
-  })
+  const colors = palette.map((c) => new THREE.Color(c))
+
   return new THREE.ShaderMaterial({
     uniforms: {
       time: { value: startTime },
-      uColor: { value: linearColors },
+      uColor: { value: colors },
       uIntensity: { value: 0.8 }
     },
     vertexShader,
@@ -209,28 +221,16 @@ const waterMaterial = new THREE.ShaderMaterial({
 
 
 // Plane A
-const lightplane = new THREE.Mesh(planegeometryA, makeRainbowMaterial(colorsA, { transparent: false, opacity: 1, intensity: 1 }))
+const lightplane = new THREE.Mesh(planegeometryA, makeRainbowMaterial(colorsA, { intensity: 0.05 }))
 lightplane.position.set(0, 0, -10) // Move it further back by default
+lightplane.renderOrder = -1 
 
 // Mesh
 const water = new THREE.Mesh(waterGeometry, waterMaterial)
 water.position.set(0, 4, 0)
 water.rotation.x = 2 * Math.PI
 
-// scene setup
-const scene = new THREE.Scene()
 
-
-const camera = new THREE.PerspectiveCamera(12, window.innerWidth / window.innerHeight, 0.1, 1000)
-const renderer = new THREE.WebGLRenderer({ antialias: true,  })
-
-renderer.setPixelRatio(Math.min(Math.max(1, window.devicePixelRatio), 2))
-// renderer.toneMapping = THREE.ACESFilmicToneMapping
-// renderer.outputEncoding = THREE.sRGBEncoding
-
-console.log('Renderer:', devicePixelRatio, renderer.getPixelRatio())
-
-document.body.appendChild(renderer.domElement)
 
 
 
@@ -349,8 +349,8 @@ async function loadEnvironment(key) {
     const texture = await loader.loadAsync(path)
     texture.mapping = THREE.EquirectangularReflectionMapping
     scene.environment = texture
-    // scene.background = texture  // Show the HDR as background
-    scene.background = new THREE.Color('#e0e0e0') // <-- black background
+    scene.background = texture  // Show the HDR as background
+    // scene.background = new THREE.Color('#000000') // <-- black background
   } catch (e) {
     console.error('Failed to load env:', key, e)
   }
@@ -415,25 +415,33 @@ bimlogo.scale.setScalar(3)
 gltfScene.position.set(1, -3.45, 0)
 
 
-const createVanillaGlassMaterial = () =>
-  Object.assign(new VanillaMeshTransmissionMaterial(10), {
-    samples: 2,
-    clearcoat: 1,
+const createVanillaGlassMaterial = () => {
+  const mat = new VanillaMeshTransmissionMaterial({
+    // IMPORTANT: This tells Three.js to generate the background buffer automatically
+    transmissionSampler: true, 
+    samples: 6,
+    clearcoat: 0,
     clearcoatRoughness: 0.1,
     transmission: 1,
     chromaticAberration: 0.06,
     anisotrophicBlur: 0.10,
     metalness: 0,
-    roughness: 0.0,
-    thickness: 3.5,
+    roughness: 0.1, // Increased slightly for softer refraction
+    thickness: 2.5,
     ior: 1.5,
     distortion: 0,
     distortionScale: 0.3,
     temporalDistortion: 0.5,
   })
+  
+  // Ensure we don't reflect the white studio lights
+  mat.envMapIntensity = 0
+  
+  return mat
+};
 
 const createGlassMaterial = () =>
-  Object.assign(new MeshTransmissionMaterial(10), {
+  Object.assign(new MeshTransmissionMaterial(6), {
     samples: 6,
     clearcoat: 1,
     clearcoatRoughness: 0.1,
@@ -441,12 +449,13 @@ const createGlassMaterial = () =>
     chromaticAberration: 0.2,
     anisotrophicBlur: 0.06,
     metalness: 0,
-    roughness: 0.2,
-    thickness: 1.5,
+    roughness: 0.15,
+    thickness: 1.7,
     ior: 1.5,
     distortion: 0,
     distortionScale: 0.3,
     temporalDistortion: 0.5,
+    envMapIntensity: 0.2,
   })
 
 const glassMaterials = []
@@ -473,6 +482,7 @@ const glassParams = {
   distortion: 0,
   distortionScale: 0.3,
   temporalDistortion: 0.5,
+  envMapIntensity: 0.5,
 }
 
 const updateGlassMaterials = (prop, value) => {
@@ -484,7 +494,10 @@ const updateGlassMaterials = (prop, value) => {
 // Glass Material GUI
 const glassFolder = gui.addFolder('Glass Material')
 glassFolder.add(glassParams, 'samples', 1, 16, 1).onChange((v) => updateGlassMaterials('samples', v))
-glassFolder.add(glassParams, 'clearcoat', 0, 1, 0.01).onChange((v) => updateGlassMaterials('clearcoat', v))
+
+glassFolder.add(glassParams, 'envMapIntensity', 0, 1, 0.3).onChange((v) => updateGlassMaterials('clearcoat', v))
+
+glassFolder.add(glassParams, 'clearcoat', 0, 1, 0.5).onChange((v) => updateGlassMaterials('envMapIntensity', v))
 glassFolder.add(glassParams, 'clearcoatRoughness', 0, 1, 0.01).onChange((v) => updateGlassMaterials('clearcoatRoughness', v))
 glassFolder.add(glassParams, 'transmission', 0, 1, 0.01).onChange((v) => updateGlassMaterials('transmission', v))
 glassFolder.add(glassParams, 'chromaticAberration', 0, 1, 0.01).onChange((v) => updateGlassMaterials('chromaticAberration', v))
@@ -527,10 +540,10 @@ splitLogo.traverse((o) => {
 
   if (matName.includes('sideglass') || matName.includes('side')) {
     // o.material = customMat
-    o.material = createTrackedGlassMaterial()
+    o.material = customMat
     // o.material = new THREE.MeshNormalMaterial()
   } else if (matName.includes('frontglass') || matName.includes('front')) {
-    o.material = createTrackedGlassMaterial()
+    o.material = createVanillaGlassMaterial()
   } else {
     // Fallback material
     o.material = customMat
@@ -633,14 +646,42 @@ function resize() {
 window.addEventListener('resize', resize)
 resize()
 
+
+const cursor = { x: 0, y: 0 }
+
+window.addEventListener('mousemove', (event) => {
+    // Normalize mouse position from -1 to 1
+    cursor.x = (event.clientX / window.innerWidth) - 0.5
+    cursor.y = (event.clientY / window.innerHeight) - 0.5
+})
+    const sensitivity = 0.5 
+
 function animate(t) {
-
-
   requestAnimationFrame(animate)
-  lightplane.material.uniforms.time.value = Date.now() - startTime
 
+
+  lightplane.material.uniforms.time.value = Date.now() - startTime
   waterMaterial.uniforms.uTime.value = t * 0.001
   controls.update()
+    if (splitLogo) {
+    const sensitivity = 0.5 
+
+    // Target X: Original 90deg offset + Mouse Y (Up/Down tilt)
+    const targetX = (Math.PI * 0.5) + (cursor.y * sensitivity)
+    
+    // Target Z: Mouse X (Left/Right rotation)
+    // Note: Since the object is rotated X=90, the local Z axis is the vertical world axis.
+    const targetZ = cursor.x * sensitivity 
+
+    // Smooth Lerp
+    splitLogo.rotation.x += (targetX - splitLogo.rotation.x) * 0.05
+    
+    // Correctly lerp Z rotation (which acts as Y rotation visually here)
+    splitLogo.rotation.z += (targetZ - splitLogo.rotation.z) * 0.05
+    
+    // Ensure Y stays 0 so we don't get weird rolling
+    splitLogo.rotation.y = 0 
+  }
   renderer.render(scene, camera)
 
   // Update all stats panels

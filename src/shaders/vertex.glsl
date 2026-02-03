@@ -1,4 +1,4 @@
-  uniform float time;
+uniform float time;
   uniform vec3 uColor[5];
   varying vec3 vColor;
   varying vec2 uUv;
@@ -77,14 +77,22 @@
   }
 
   void main() {
-
-    float displacementNoise = max(0.0, noise(vec3(uv * 5.0, time * 0.00025)));
+    // 1. Calculate pattern for color
+    // We slow down the time slightly and decrease UV scale for larger "blobs"
+    float noisePattern = noise(vec3(uv * 2.5, time * 0.0001));
     
-    vColor = uColor[3];
-    for (int i = 0; i < 5; i++) {
-      float colorNoise = noise(vec3(uv * 2.0 + time * float(i) * 0.00001, time * 0.00005 * float(i)));
-      vColor = mix(vColor, uColor[i], colorNoise);
-    }
+    // Remap noise from approx [-1.0, 1.0] to [0.0, 1.0]
+    float pattern = noisePattern * 0.5 + 0.5;
+
+    // "Contrast" boost: smoothstep makes the transition faster, separating the colors cleanly.
+    // This removes the "muddy" middle gray area.
+    float mixStrength = smoothstep(0.25, 0.75, pattern);
+    
+    // Mix strictly between the first two colors
+    vColor = mix(uColor[0], uColor[1], mixStrength);
+
+    // 2. Calculate displacement (Using same noise logic as before for consistency)
+    float displacementNoise = max(0.0, noise(vec3(uv * 5.0, time * 0.00025)));
     
     uUv = uv;
     vec3 pos = vec3(position.x, position.y, displacementNoise * 0.3);
